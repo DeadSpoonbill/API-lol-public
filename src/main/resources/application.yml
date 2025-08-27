@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: ${JDBC_DATABASE_URL}   # ex: jdbc:postgresql://HOST.neon.tech/neondb?user=...&password=...&sslmode=require
+    hikari:
+      maximum-pool-size: 4
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+logging:
+  level:
+    root: INFO
+    com.vincent.lol: INFO
+
+app:
+  riot:
+    apiKey: ${RIOT_API_KEY}
+    router: ${RIOT_ROUTER:europe}  # americas | asia | europe
+    type: ${TYPE:}                 # ex: ranked (optionnel)
+    queues: ${QUEUES:420,440}      # par défaut on prend que le classé SR
+  target:
+    gameName: ${GAME_NAME:}
+    tagLine: ${TAG_LINE:}
+    count: ${COUNT:30}
