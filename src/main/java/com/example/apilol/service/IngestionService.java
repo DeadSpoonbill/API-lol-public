@@ -8,6 +8,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.util.*;
 
 import static com.example.apilol.db.Db.jsonb;
@@ -25,6 +27,7 @@ public class IngestionService {
         this.cfg = cfg;
     }
 
+    /** Propage les exceptions car RiotApiClient déclare throws Exception */
     public void ingestPlayer(String gameName, String tagLine, int count) throws Exception {
         var account = api.getAccountByRiotId(gameName, tagLine);
         if (account == null) throw new RuntimeException("PUUID introuvable");
@@ -56,14 +59,14 @@ public class IngestionService {
     private void upsertSummoner(String puuid, Map<String,Object> accountRaw) throws Exception {
         String raw = om.writeValueAsString(Map.of("account", accountRaw));
         jdbc.update("""
-      INSERT INTO lol.summoner(puuid, game_name, tag_line, last_seen_at, raw)
-      VALUES (?, ?, ?, NOW(), ?)
-      ON CONFLICT (puuid) DO UPDATE SET
-        game_name = EXCLUDED.game_name,
-        tag_line  = EXCLUDED.tag_line,
-        last_seen_at = NOW(),
-        raw = COALESCE(lol.summoner.raw, '{}'::jsonb) || EXCLUDED.raw
-    """,
+            INSERT INTO lol.summoner(puuid, game_name, tag_line, last_seen_at, raw)
+            VALUES (?, ?, ?, NOW(), ?)
+            ON CONFLICT (puuid) DO UPDATE SET
+              game_name = EXCLUDED.game_name,
+              tag_line  = EXCLUDED.tag_line,
+              last_seen_at = NOW(),
+              raw = COALESCE(lol.summoner.raw, '{}'::jsonb) || EXCLUDED.raw
+        """,
                 puuid,
                 Objects.toString(accountRaw.get("gameName"), null),
                 Objects.toString(accountRaw.get("tagLine"), null),
@@ -81,12 +84,12 @@ public class IngestionService {
                 ? gameVersion.split("\\.")[0] + "." + gameVersion.split("\\.")[1] : null;
 
         jdbc.update("""
-      INSERT INTO lol.match(match_id, data_version, game_version, patch, queue_id,
-        game_creation_ms, game_start_ms, game_end_ms, game_duration_s, map_id, platform_id,
-        tournament_code, region_router, raw)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      ON CONFLICT (match_id) DO UPDATE SET raw = EXCLUDED.raw
-    """,
+            INSERT INTO lol.match(match_id, data_version, game_version, patch, queue_id,
+              game_creation_ms, game_start_ms, game_end_ms, game_duration_s, map_id, platform_id,
+              tournament_code, region_router, raw)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (match_id) DO UPDATE SET raw = EXCLUDED.raw
+        """,
                 mid,
                 Objects.toString(meta.get("dataVersion"), null),
                 gameVersion, patch,
@@ -118,11 +121,11 @@ public class IngestionService {
             for (int i=0;i<5;i++) b[i] = (i < bans.size()) ? toInt(bans.get(i).get("championId")) : null;
 
             jdbc.update("""
-        INSERT INTO lol.team(match_id, team_id, win, baron_kills, dragon_kills, rift_herald_kills,
-          inhibitor_kills, tower_kills, ban0, ban1, ban2, ban3, ban4)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT (match_id, team_id) DO UPDATE SET win = EXCLUDED.win
-      """,
+                INSERT INTO lol.team(match_id, team_id, win, baron_kills, dragon_kills, rift_herald_kills,
+                  inhibitor_kills, tower_kills, ban0, ban1, ban2, ban3, ban4)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT (match_id, team_id) DO UPDATE SET win = EXCLUDED.win
+            """,
                     mid, teamId, toBool(t.get("win")),
                     toInt(baron.get("kills")), toInt(dragon.get("kills")), toInt(herald.get("kills")),
                     toInt(inhib.get("kills")), toInt(tower.get("kills")),
@@ -134,17 +137,17 @@ public class IngestionService {
         var parts = (List<Map<String,Object>>) info.getOrDefault("participants", List.of());
         for (var p : parts) {
             jdbc.update("""
-        INSERT INTO lol.participant(
-          match_id, participant_id, puuid, team_id, champion_id, champion_name,
-          riot_id_game_name, riot_id_tagline, individual_position, lane, role,
-          summoner1_id, summoner2_id, item0, item1, item2, item3, item4, item5, item6,
-          kills, deaths, assists, total_damage_to_champs, total_damage_taken,
-          damage_self_mitigated, gold_earned, vision_score, wards_placed, wards_killed,
-          detector_wards_placed, champ_level, total_minions_killed, neutral_minions_killed,
-          time_ccing_others, win, perks, stats
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT (match_id, participant_id) DO UPDATE SET perks = EXCLUDED.perks, stats = EXCLUDED.stats
-      """,
+                INSERT INTO lol.participant(
+                  match_id, participant_id, puuid, team_id, champion_id, champion_name,
+                  riot_id_game_name, riot_id_tagline, individual_position, lane, role,
+                  summoner1_id, summoner2_id, item0, item1, item2, item3, item4, item5, item6,
+                  kills, deaths, assists, total_damage_to_champs, total_damage_taken,
+                  damage_self_mitigated, gold_earned, vision_score, wards_placed, wards_killed,
+                  detector_wards_placed, champ_level, total_minions_killed, neutral_minions_killed,
+                  time_ccing_others, win, perks, stats
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT (match_id, participant_id) DO UPDATE SET perks = EXCLUDED.perks, stats = EXCLUDED.stats
+            """,
                     mid, toInt(p.get("participantId")), Objects.toString(p.get("puuid"), null),
                     toInt(p.get("teamId")), toInt(p.get("championId")),
                     Objects.toString(p.get("championName"), null),
@@ -183,12 +186,12 @@ public class IngestionService {
                 var d = (Map<String,Object>) e.getValue();
                 var pos = (Map<String,Object>) d.getOrDefault("position", Map.of());
                 jdbc.update("""
-          INSERT INTO lol.participant_frame(
-            match_id, frame_index, ts_ms, participant_id, total_gold, current_gold,
-            xp, level, minions_killed, jungle_minions_killed, position_x, position_y, damage_stats
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-          ON CONFLICT (match_id, frame_index, participant_id) DO NOTHING
-        """,
+                    INSERT INTO lol.participant_frame(
+                      match_id, frame_index, ts_ms, participant_id, total_gold, current_gold,
+                      xp, level, minions_killed, jungle_minions_killed, position_x, position_y, damage_stats
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT (match_id, frame_index, participant_id) DO NOTHING
+                """,
                         matchId, idx, ts, pid,
                         toInt(d.get("totalGold")), toInt(d.get("currentGold")),
                         toInt(d.get("xp")), toInt(d.get("level")),
@@ -203,16 +206,15 @@ public class IngestionService {
                 var pos = (Map<String,Object>) ev.getOrDefault("position", Map.of());
                 List<Integer> assists = (List<Integer>) ev.get("assistingParticipantIds");
 
-                // on utilise un PreparedStatement pour l'array SQL
                 jdbc.update(con -> {
                     PreparedStatement ps = con.prepareStatement("""
-            INSERT INTO lol.timeline_event(
-              match_id, ts_ms, event_type, participant_id, killer_id, victim_id,
-              team_id, assisting_ids, position_x, position_y, item_id, after_id, before_id,
-              skill_slot, level_up_type, ward_type, building_type, tower_type,
-              monster_type, monster_sub_type, bounty, gold_gain, other
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-          """);
+                        INSERT INTO lol.timeline_event(
+                          match_id, ts_ms, event_type, participant_id, killer_id, victim_id,
+                          team_id, assisting_ids, position_x, position_y, item_id, after_id, before_id,
+                          skill_slot, level_up_type, ward_type, building_type, tower_type,
+                          monster_type, monster_sub_type, bounty, gold_gain, other
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """);
                     ps.setString(1, matchId);
                     setLong(ps, 2, toLong(ev.get("timestamp")));
                     ps.setString(3, Objects.toString(ev.get("type"), null));
@@ -220,7 +222,13 @@ public class IngestionService {
                     setInt(ps, 5, toInt(ev.get("killerId")));
                     setInt(ps, 6, toInt(ev.get("victimId")));
                     setInt(ps, 7, toInt(ev.get("teamId")));
-                    ps.setArray(8, assists != null ? con.createArrayOf("int4", assists.toArray()) : null);
+
+                    if (assists != null && !assists.isEmpty()) {
+                        ps.setArray(8, con.createArrayOf("int4", assists.toArray()));
+                    } else {
+                        ps.setNull(8, Types.ARRAY);
+                    }
+
                     setInt(ps, 9, toInt(pos.get("x")));
                     setInt(ps,10, toInt(pos.get("y")));
                     setInt(ps,11, toInt(ev.get("itemId")));
@@ -235,7 +243,11 @@ public class IngestionService {
                     ps.setString(20, Objects.toString(ev.get("monsterSubType"), null));
                     setInt(ps,21, toInt(ev.get("bounty")));
                     setInt(ps,22, toInt(ev.get("goldGain")));
-                    ps.setObject(23, jsonb(om.writeValueAsString(stripEventKnown(ev))));
+                    try {
+                        ps.setObject(23, jsonb(om.writeValueAsString(stripEventKnown(ev))));
+                    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                        throw new RuntimeException("Erreur sérialisation JSON (event)", e);
+                    }
                     return ps;
                 });
             }
@@ -247,8 +259,16 @@ public class IngestionService {
     private static Long toLong(Object o){ return o==null?null:(o instanceof Number n? n.longValue(): Long.parseLong(o.toString())); }
     private static Double toDouble(Object o){ return o==null?null:(o instanceof Number n? n.doubleValue(): Double.parseDouble(o.toString())); }
     private static Boolean toBool(Object o){ return o==null?null:(o instanceof Boolean b? b: Boolean.parseBoolean(o.toString())); }
-    private static void setInt(PreparedStatement ps, int idx, Integer v) throws Exception { if (v==null) ps.setObject(idx, null); else ps.setInt(idx, v); }
-    private static void setLong(PreparedStatement ps, int idx, Long v) throws Exception { if (v==null) ps.setObject(idx, null); else ps.setLong(idx, v); }
+
+    // IMPORTANT: SQLException uniquement (compatible PreparedStatementCreator)
+    private static void setInt(PreparedStatement ps, int idx, Integer v) throws SQLException {
+        if (v == null) ps.setNull(idx, Types.INTEGER);
+        else ps.setInt(idx, v);
+    }
+    private static void setLong(PreparedStatement ps, int idx, Long v) throws SQLException {
+        if (v == null) ps.setNull(idx, Types.BIGINT);
+        else ps.setLong(idx, v);
+    }
 
     private static Map<String,Object> stripParticipantKnown(Map<String,Object> p) {
         Set<String> known = Set.of("participantId","puuid","teamId","championId","championName",
@@ -262,6 +282,7 @@ public class IngestionService {
         for (var e : p.entrySet()) if (!known.contains(e.getKey())) copy.put(e.getKey(), e.getValue());
         return copy;
     }
+
     private static Map<String,Object> stripEventKnown(Map<String,Object> ev) {
         Set<String> known = Set.of("timestamp","type","participantId","killerId","victimId","teamId",
                 "assistingParticipantIds","position","itemId","afterId","beforeId","skillSlot",

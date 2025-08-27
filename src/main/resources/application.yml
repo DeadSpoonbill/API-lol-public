@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${JDBC_DATABASE_URL}   # ex: jdbc:postgresql://HOST.neon.tech/neondb?user=...&password=...&sslmode=require
+    url: ${JDBC_DATABASE_URL}
     hikari:
       maximum-pool-size: 4
   flyway:
@@ -17,7 +17,7 @@ app:
     apiKey: ${RIOT_API_KEY}
     router: ${RIOT_ROUTER:europe}  # americas | asia | europe
     type: ${TYPE:}                 # ex: ranked (optionnel)
-    queues: ${QUEUES:420,440}      # par défaut on prend que le classé SR
+    queues: ${QUEUES:420}      # par défaut: classé (Solo + Flex)
   target:
     gameName: ${GAME_NAME:}
     tagLine: ${TAG_LINE:}

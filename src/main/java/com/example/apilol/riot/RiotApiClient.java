@@ -74,7 +74,8 @@ public class RiotApiClient {
         if (type != null && !type.isBlank()) q.put("type", type);
         String body = getBody("/lol/match/v5/matches/by-puuid/" + puuid + "/ids", q);
         if (body == null) return List.of();
-        return om.readValue(body, new TypeReference<List<String>>() {});
+        return om.readValue(body, new TypeReference<>() {
+        });
     }
 
     public Map<String,Object> getMatch(String matchId) throws Exception {
